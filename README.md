@@ -1,4 +1,4 @@
-# Early Prediction of Sepsis and Culture-Confirmed Infection in the ICU
+# Real-time clinical decision support system for early identification of infection and sepsis in the intensive care unit: a retrospective development and prospective deployment study
 
 Study code and downstream analytical workflows associated with the article:
 
