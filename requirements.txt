@@ -1,0 +1,21 @@
+# Core numerical and data-processing packages
+numpy
+pandas
+scipy
+scikit-learn
+
+# Machine-learning framework and TabNet
+torch
+pytorch-tabnet
+imbalanced-learn
+
+# Model persistence, progress reporting, and figures
+joblib
+tqdm
+matplotlib
+
+# Input/output backends used by the preprocessing scripts
+openpyxl
+pyarrow
+sqlalchemy
+oracledb
