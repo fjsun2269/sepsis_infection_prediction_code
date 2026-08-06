@@ -98,26 +98,29 @@ trained parameters.
 
 Python 3.10 or later.
 
-```
-pandas
-numpy
-scikit-learn
-torch
-pytorch-tabnet
-imbalanced-learn
-joblib
-matplotlib
-tqdm
+The minimum package versions declared in `requirements.txt` are:
+
+```text
+numpy>=1.21.0
+pandas>=1.5.0
+scikit-learn>=1.2.0
+imbalanced-learn>=0.10.0
+pytorch-tabnet>=4.0
+torch>=2.0.0
+scipy>=1.9.0
+matplotlib>=3.6.0
+seaborn>=0.12.0
+joblib>=1.2.0
+tqdm>=4.64.0
+openpyxl>=3.1.0
+pyarrow
+sqlalchemy
+oracledb
 ```
 
-Optional, depending on how inputs are supplied:
-
-```
-sqlalchemy          # only when reading inputs via sql:<file>.sql
-oracledb            # only for an Oracle source
-pyarrow             # only for Parquet inputs
-openpyxl            # only for Excel inputs
-```
+`pyarrow`, `sqlalchemy`, and `oracledb` are retained without minimum-version
+constraints because they are optional input backends used only for Parquet,
+SQL-based, or Oracle data sources, respectively.
 
 Install with:
 
@@ -125,9 +128,10 @@ Install with:
 pip install -r requirements.txt
 ```
 
-The scripts were last verified against pandas 3.0, numpy 2.4, scikit-learn 1.8,
-torch 2.13 and pytorch-tabnet on Python 3.12. Pin these in `requirements.txt`
-for an exact reproduction.
+The `>=` specifiers define minimum supported versions rather than an exact
+environment lock. For exact reproduction of a completed run, retain the generated
+`run_config.json` together with the package versions recorded from the execution
+environment.
 
 ---
 
