@@ -8,7 +8,6 @@ scikit-learn>=1.2.0
 torch>=2.0.0
 pytorch-tabnet>=4.0
 imbalanced-learn>=0.10.0
-xgboost>=1.7.0
 
 # Model persistence, progress reporting, and figures
 joblib>=1.2.0
