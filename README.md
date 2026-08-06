@@ -1,8 +1,318 @@
-# Sepsis and Infection Prediction Code
-Source code and scripts for the sepsis and infection prediction project.
+# Early Prediction of Sepsis and Culture-Confirmed Infection in the ICU
 
-The code is currently being organized, documented, and supplemented with detailed comments. It will be made available as soon as possible.
+Study code and downstream analytical workflows associated with the article:
 
+> **Real-time clinical decision support system for early identification of infection and sepsis in the intensive care unit: a retrospective development and prospective deployment study**  
+> **First author:** Fang-Ju Sun  
+> **Authors:** Fang-Ju Sun, Yen-Yu Liu, Li-Kuo Kuo, Ting-Yu Hu, Kuang-Hua Cheng, Hung-Ting Chen, Po-Jen Chang, Min-Ching Wu, Hung-I Yeh, and Kun-Pin Wu  
+> *BMJ Quality & Safety* (2026). <https://doi.org/10.1136/bmjqs-2026-020104>
 
-This repository is released under GPL v3.0 for academic verification and reproducibility purposes only.
-For Non-Commercial Academic Use Only: Any commercial usage, integration into proprietary software, or unlicensed redistribution for commercial profit is strictly prohibited. For commercial licensing, patent inquiries, or institutional partnerships, please contact the corresponding author.
+Additional supplemental material is published online only and can be viewed
+through the journal.
+
+This repository contains the data-preparation pipeline and the publicly released
+`03_*` and `04_*` modelling tracks reported in the manuscript. These scripts
+contain the executable model-construction and training logic, including the
+optimizer and learning rate, learning-rate scheduler, cross-validation and split
+settings, random seeds, epoch and early-stopping limits, batch settings,
+classification thresholds, and balancing or calibration procedures. TabNet
+constructor parameters not overridden in the scripts use the defaults of the
+installed `pytorch-tabnet` version. Each run writes a `run_config.json` containing
+the resolved command-line settings and pipeline metadata; no separate private
+hyperparameter configuration file is required. The repository contains **no**
+patient data, database credentials, institutional schema definitions, or
+patient-identifiable information.
+
+---
+
+## What is in this repository
+
+| Stage | Script | Purpose |
+|---|---|---|
+| 1 | `01_01_sepsis_onset_auto_label.py` | Sepsis-3 labelling: suspected infection from culture/antibiotic order pairs, then organ dysfunction from SOFA |
+| 2 | `01_02_infection_onset_auto_label.py` | Culture-confirmed infection labelling within the infection-confirmation window |
+| 3 | `01_03_cohort_selection_flowchart.py` | Cohort exclusion criteria and the shared patient-level 80/20 train/test split |
+| 4 | `01_04_feature_preprocessing.py` | Physiological clipping and the imputation rules of the online supplemental table |
+| 5 | `01_05_build_feature_windows.py` | Construction of the 8-hour feature-window samples |
+| — | `03_0*_calibrated_*.py` | Full-feature TabNet models with isotonic probability calibration |
+| — | `04_0*_without_balance_*.py` | No-balancing sensitivity analysis (no PSM, no oversampling, no calibration) |
+
+Each modelling track is provided in four variants covering the two outcomes
+(sepsis, culture-confirmed infection) and the two validation settings
+(internal only; reduced feature set with external MIMIC-IV validation).
+
+Each `03_*` and `04_*` modelling script is a self-contained command-line program
+with `--help` and writes a `run_config.json` recording the resolved command-line
+settings and pipeline metadata. The repository scripts read their inputs either
+from delimited files or from a local `.sql` query file executed against a
+database named by the `DB_URL` environment variable. Institution-specific table
+and column names therefore stay in local `.sql` files that are not part of this
+repository; column names that differ from the canonical ones can be remapped at
+run time with `--column-map RAW=CANONICAL`.
+
+---
+
+## What is not included
+
+**The main model (`02_*`) and the online dashboard are not published here.**
+
+Both are covered by pending intellectual property, and we are currently
+preparing an application to the Taiwan Food and Drug Administration (TFDA) for
+approval of the model as software as a medical device. We are therefore unable
+to release the final model, its trained weights, or the deployment code at this
+time.
+
+Readers interested in the analytical workflow may refer to the calibrated models
+(`03_*`) and the no-balancing sensitivity analysis (`04_*`) included here.
+
+Researchers with an academic interest in the withheld components are invited to
+contact the corresponding author (see [Contact](#contact)). Requests will be
+considered on a case-by-case basis and may require a data-use or material
+transfer agreement.
+
+---
+
+## Data availability statement
+
+Data are available upon reasonable request. The patient-level datasets used in
+this study are not publicly available because of privacy restrictions and
+institutional data governance policies. Data requests may be directed to the
+corresponding author; however, any data request will require independent
+institutional review and approval and may not always be granted. Relevant
+summary statistics are provided in the article and in online supplemental
+file 1. The study code and downstream analytical workflows are publicly
+available on GitHub
+(<https://github.com/fjsun2269/sepsis_infection_prediction_code>). The external
+validation dataset used in this study, the MIMIC-IV database, is publicly
+available to qualified researchers who complete the required data use agreement
+and training and can be accessed at <https://physionet.org/content/mimiciv/>.
+
+Given the performance of the algorithm, we are currently in the process of
+applying to the Taiwan Food and Drug Administration for approval of the model as
+a software medical device, and are unable to share the final algorithm or its
+trained parameters.
+
+---
+
+## Requirements
+
+Python 3.10 or later.
+
+```
+pandas
+numpy
+scikit-learn
+torch
+pytorch-tabnet
+imbalanced-learn
+joblib
+matplotlib
+tqdm
+```
+
+Optional, depending on how inputs are supplied:
+
+```
+sqlalchemy          # only when reading inputs via sql:<file>.sql
+oracledb            # only for an Oracle source
+pyarrow             # only for Parquet inputs
+openpyxl            # only for Excel inputs
+```
+
+Install with:
+
+```bash
+pip install -r requirements.txt
+```
+
+The scripts were last verified against pandas 3.0, numpy 2.4, scikit-learn 1.8,
+torch 2.13 and pytorch-tabnet on Python 3.12. Pin these in `requirements.txt`
+for an exact reproduction.
+
+---
+
+## Running the pipeline
+
+The five preparation scripts run in order; each consumes the previous stage's
+output.
+
+```bash
+# 1. Sepsis-3 labelling
+python 01_01_sepsis_onset_auto_label.py \
+    --si-codes data/si_codes.csv \
+    --orders   data/orders.csv \
+    --sofa     data/sofa.csv \
+    --outdir   output/step1
+
+# 2. Culture-confirmed infection labelling
+python 01_02_infection_onset_auto_label.py \
+    --cohort   output/step1/sepsis_onset.csv \
+    --cultures data/culture_report.csv \
+    --outdir   output/step2
+
+# 3. Cohort selection and the shared patient-level split
+python 01_03_cohort_selection_flowchart.py \
+    --cohort output/step2/infection_onset.csv \
+    --outdir output/step3
+
+# 4. Clipping and imputation
+python 01_04_feature_preprocessing.py \
+    --vital-input  data/vital_features.csv \
+    --lab-input    data/lab_features.csv \
+    --cohort-input output/step3/study_cohort.csv \
+    --outdir       output/step4
+
+# 5. 8-hour feature windows
+#    Step 4 writes the vital and laboratory tables separately, both keyed on
+#    adm_ICU_id with the timestamp in a column named `date`. Joining them onto a
+#    single hourly grid is a local step; the merged table is what --input expects.
+python 01_05_build_feature_windows.py \
+    --input hourly_icu.csv \
+    --time-col date \
+    --task both
+```
+
+Modelling then runs on the engineered feature tables:
+
+```bash
+# Calibrated model, internal sepsis
+python 03_01_calibrated_internal_sepsis.py \
+    --train-input output/train_features.csv \
+    --test-input  output/test_features.csv \
+    --outdir      outputs/sepsis_internal_calibrated
+
+# No-balancing sensitivity analysis, internal sepsis
+python 04_01_without_balance_internal_sepsis.py \
+    --train-input output/train_features.csv \
+    --test-input  output/test_features.csv \
+    --outdir      outputs/no_balance_internal_sepsis
+```
+
+`--self-test` is available on `01_05_build_feature_windows.py` and runs the full
+window-construction logic against synthetic data, with no institutional input
+required.
+
+---
+
+## Reproducibility notes
+
+Several methodological choices are exposed as command-line options rather than
+being fixed silently. The defaults below are the ones used for the published
+analysis unless stated otherwise.
+
+**Hyperparameter availability.** The `03_*` and `04_*` scripts publicly expose
+the complete executable model-construction and training workflow. Author-selected
+settings—including Adam with a learning rate of 0.001, the StepLR scheduler,
+cross-validation and split settings, random seeds, maximum epochs, early-stopping
+patience, batch and virtual-batch sizes, thresholds, and balancing or calibration
+procedures—are defined directly in the source code or command-line defaults.
+TabNet constructor parameters that are not explicitly overridden use the defaults
+of the installed `pytorch-tabnet` version. Each run writes the resolved
+command-line settings and pipeline metadata to `run_config.json`; optimizer and
+scheduler values remain visible in the source code. No separate private
+hyperparameter file is required. Accordingly, the manuscript statement that
+“hyperparameter settings are publicly available in the GitHub repository” is
+supported by the released code. For exact reproduction of library-default TabNet
+architecture parameters, dependency versions should be pinned in
+`requirements.txt`.
+
+**ICU episode definition.** An ICU discharge followed by readmission within
+48 hours is treated as one episode (`--merge-stay-gap-hours`, default 48). The
+interval is not standardised in the literature — MIMIC-III uses 24 hours,
+MIMIC-IV declines to merge non-consecutive stays at all — so it is exposed for
+sensitivity analysis.
+
+**Two distinct 24 h / 72 h windows.** Step 1 pairs a culture with an antibiotic
+(culture first → antibiotic within 72 h; antibiotic first → culture within 24 h).
+Step 2 opens a window of −24 h to +72 h around the labelled sepsis onset and asks
+whether any positive culture falls inside it. These are different rules with
+different anchors; see the module docstrings before comparing against the
+manuscript.
+
+**Propensity-score matching.** 1:1 greedy nearest-neighbour matching on sex, age
+and Charlson Comorbidity Index, applied only to the internal development cohort
+and never to the test or external cohorts. For the cross-validation report,
+matching is performed inside each training fold, so the validation fold retains
+the cohort's natural outcome prevalence. The final model is trained on the fully
+matched development cohort.
+
+**APACHE II aggregation.** Aggregated as the maximum within the 8-hour window in
+every modelling script, so that the no-balancing analysis differs from the main
+analysis only by the absence of class balancing.
+`--apache-aggregation first` is available as an explicit sensitivity option.
+
+**Calibration.** Isotonic regression is fitted on an independent calibration
+cohort split at the patient level. Metrics reported for that calibration cohort
+are in-sample and are flagged as such in the output table
+(`calibrator_fitted_on_this_set`, `evaluation`); held-out calibration
+performance is the internal-test row.
+
+**Randomness.** All splits, matching and resampling are seeded. Control index
+times in step 1 are derived from the seed and the stay identifier, so adding or
+reordering other stays does not change existing index times.
+
+---
+
+## Outputs and de-identification
+
+No script writes patient-identifiable data. Prediction files contain a row
+number, the true label and model probabilities only. Direct and quasi
+identifiers — patient and encounter numbers, bed numbers, admission and discharge
+timestamps, onset timestamps — are stripped before anything is written to disk.
+
+Patient-level feature tables are written only when explicitly requested with
+`--write-feature-tables`. They are analysis intermediates and must not be
+committed to a public repository. The supplied `.gitignore` excludes them, along
+with `sql/*.sql`, which holds institution-internal schema, table and column
+names.
+
+---
+
+## License and permitted use
+
+This repository is released under the **PolyForm Noncommercial License 1.0.0**.
+The full text is in [`LICENSE`](LICENSE).
+
+Any noncommercial purpose is permitted. Use by educational institutions, public
+research organisations, health organisations and government institutions is
+permitted regardless of funding source. Personal use for research, experiment
+and testing for the benefit of public knowledge is permitted.
+
+**Commercial use is not licensed.** Integration into proprietary or commercial
+software, commercial deployment, and redistribution for commercial profit are
+outside the scope of this license. The authors additionally reserve all patent
+rights in the underlying method; the patent license granted by these terms
+extends only to permitted noncommercial purposes.
+
+For commercial licensing, patent enquiries, regulatory questions, or
+institutional partnerships, please contact the corresponding author before
+proceeding.
+
+> Required Notice: Copyright 2026 Fang-Ju Sun and contributors
+
+---
+
+## Citation
+
+If you use this code, please cite:
+
+```bibtex
+@article{sun2026sepsis,
+  author  = {Sun, Fang-Ju and Liu, Yen-Yu and Kuo, Li-Kuo and Hu, Ting-Yu and Cheng, Kuang-Hua and Chen, Hung-Ting and Chang, Po-Jen and Wu, Min-Ching and Yeh, Hung-I and Wu, Kun-Pin},
+  title   = {Real-time clinical decision support system for early identification of infection and sepsis in the intensive care unit: a retrospective development and prospective deployment study},
+  journal = {BMJ Quality \& Safety},
+  year    = {2026},
+  doi     = {10.1136/bmjqs-2026-020104},
+  url     = {https://doi.org/10.1136/bmjqs-2026-020104}
+}
+```
+
+---
+
+## Contact
+
+**Fang-Ju Sun** — first author and repository contact
+✉️ fjsun.b612@mmh.org.tw
+
+Please use this address for requests concerning the withheld main model and
+dashboard, data access, commercial licensing, or patent matters.
