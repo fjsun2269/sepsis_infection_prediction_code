@@ -10,17 +10,17 @@ Study code and downstream analytical workflows associated with the article:
 Additional supplemental material is published online only and can be viewed
 through the journal.
 
-This repository contains the data-preparation pipeline and the publicly released
-`03_*` and `04_*` modelling tracks reported in the manuscript. These scripts
+This repository contains the data-preparation pipeline (`01_*`) and the publicly
+released `04_*` modelling track reported in the manuscript. The `04_*` scripts
 contain the executable model-construction and training logic, including the
-optimizer and learning rate, learning-rate scheduler, cross-validation and split
-settings, random seeds, epoch and early-stopping limits, batch settings,
-classification thresholds, and balancing or calibration procedures. TabNet
+TabNet architecture setup, the optimizer and learning rate, learning-rate
+scheduler, cross-validation and split settings, random seeds, epoch and
+early-stopping limits, batch settings, and classification thresholds. TabNet
 constructor parameters not overridden in the scripts use the defaults of the
-installed `pytorch-tabnet` version. Each run writes a `run_config.json` containing
-the resolved command-line settings and pipeline metadata; no separate private
-hyperparameter configuration file is required. The repository contains **no**
-patient data, database credentials, institutional schema definitions, or
+installed `pytorch-tabnet` version. Each run writes a `run_config.json`
+containing the resolved command-line settings and pipeline metadata; no separate
+private hyperparameter configuration file is required. The repository contains
+**no** patient data, database credentials, institutional schema definitions, or
 patient-identifiable information.
 
 ---
@@ -34,15 +34,14 @@ patient-identifiable information.
 | 3 | `01_03_cohort_selection_flowchart.py` | Cohort exclusion criteria and the shared patient-level 80/20 train/test split |
 | 4 | `01_04_feature_preprocessing.py` | Physiological clipping and the imputation rules of the online supplemental table |
 | 5 | `01_05_build_feature_windows.py` | Construction of the 8-hour feature-window samples |
-| — | `03_0*_calibrated_*.py` | Full-feature TabNet models with isotonic probability calibration |
-| — | `04_0*_without_balance_*.py` | No-balancing sensitivity analysis (no PSM, no oversampling, no calibration) |
+| — | `04_0*_without_balance_*.py` | Modelling track released here: TabNet training without class balancing (no PSM, no oversampling, no calibration) |
 
-Each modelling track is provided in four variants covering the two outcomes
-(sepsis, culture-confirmed infection) and the two validation settings
+The released modelling track is provided in four variants covering the two
+outcomes (sepsis, culture-confirmed infection) and the two validation settings
 (internal only; reduced feature set with external MIMIC-IV validation).
 
-Each `03_*` and `04_*` modelling script is a self-contained command-line program
-with `--help` and writes a `run_config.json` recording the resolved command-line
+Each `04_*` modelling script is a self-contained command-line program with
+`--help` and writes a `run_config.json` recording the resolved command-line
 settings and pipeline metadata. The repository scripts read their inputs either
 from delimited files or from a local `.sql` query file executed against a
 database named by the `DB_URL` environment variable. Institution-specific table
@@ -54,21 +53,38 @@ run time with `--column-map RAW=CANONICAL`.
 
 ## What is not included
 
-**The main model (`02_*`) and the online dashboard are not published here.**
+The following components are **not** published here:
 
-Both are covered by pending intellectual property, and we are currently
-preparing an application to the Taiwan Food and Drug Administration (TFDA) for
-approval of the model as software as a medical device. We are therefore unable
-to release the final model, its trained weights, or the deployment code at this
-time.
+- **The main model (`02_*`)** — the balanced, deployed dual-model configuration,
+  together with its trained weights.
+- **The probability-calibration track (`03_*`)** — the isotonic-regression
+  calibration workflow and the calibration-cohort split.
+- **The real-time dashboard and deployment stack** — the FastAPI/WebSocket
+  service, container and reverse-proxy configuration, and the relational
+  database layer described in the manuscript.
+- **Institution-internal `.sql` query files**, schema definitions, table and
+  column names.
 
-Readers interested in the analytical workflow may refer to the calibrated models
-(`03_*`) and the no-balancing sensitivity analysis (`04_*`) included here.
+These components are covered by a pending patent application (Taiwan invention
+patent application no. 113134453, *Systems for Predicting Onset of Sepsis*), and
+we are currently preparing an application to the Taiwan Food and Drug
+Administration (TFDA) for approval of the model as software as a medical device.
+We are therefore unable to release the final model, its trained weights, the
+calibration workflow, or the deployment code at this time.
+
+The methodological content of the withheld components is fully described in the
+manuscript and its online supplemental material: the propensity-score matching
+and Borderline-SMOTE balancing procedure, the isotonic-regression calibration,
+the temporal prediction framework, the final feature sets, and the reported
+performance and threshold analyses. The `04_*` scripts released here share the
+same data pipeline, feature definitions, TabNet configuration and training
+procedure, and differ from the main analysis by the absence of class balancing
+and probability calibration.
 
 Researchers with an academic interest in the withheld components are invited to
-contact the corresponding author (see [Contact](#contact)). Requests will be
-considered on a case-by-case basis and may require a data-use or material
-transfer agreement.
+contact the first author (see [Contact](#contact)). Requests will be considered
+on a case-by-case basis and may require a data-use or material transfer
+agreement.
 
 ---
 
@@ -89,8 +105,8 @@ and training and can be accessed at <https://physionet.org/content/mimiciv/>.
 
 Given the performance of the algorithm, we are currently in the process of
 applying to the Taiwan Food and Drug Administration for approval of the model as
-a software medical device, and are unable to share the final algorithm or its
-trained parameters.
+a software medical device, and are unable to share the final algorithm, its
+trained parameters, the calibration workflow, or the deployment code.
 
 ---
 
@@ -179,18 +195,15 @@ python 01_05_build_feature_windows.py \
 Modelling then runs on the engineered feature tables:
 
 ```bash
-# Calibrated model, internal sepsis
-python 03_01_calibrated_internal_sepsis.py \
-    --train-input output/train_features.csv \
-    --test-input  output/test_features.csv \
-    --outdir      outputs/sepsis_internal_calibrated
-
-# No-balancing sensitivity analysis, internal sepsis
+# Released modelling track, internal sepsis
 python 04_01_without_balance_internal_sepsis.py \
     --train-input output/train_features.csv \
     --test-input  output/test_features.csv \
     --outdir      outputs/no_balance_internal_sepsis
 ```
+
+The remaining three variants (internal infection; reduced-feature sepsis and
+infection with external MIMIC-IV validation) follow the same call signature.
 
 `--self-test` is available on `01_05_build_feature_windows.py` and runs the full
 window-construction logic against synthetic data, with no institutional input
@@ -204,19 +217,18 @@ Several methodological choices are exposed as command-line options rather than
 being fixed silently. The defaults below are the ones used for the published
 analysis unless stated otherwise.
 
-**Hyperparameter availability.** The `03_*` and `04_*` scripts publicly expose
-the complete executable model-construction and training workflow. Author-selected
-settings—including Adam with a learning rate of 0.001, the StepLR scheduler,
-cross-validation and split settings, random seeds, maximum epochs, early-stopping
-patience, batch and virtual-batch sizes, thresholds, and balancing or calibration
-procedures—are defined directly in the source code or command-line defaults.
-TabNet constructor parameters that are not explicitly overridden use the defaults
-of the installed `pytorch-tabnet` version. Each run writes the resolved
+**Hyperparameter availability.** The `04_*` scripts publicly expose the
+executable model-construction and training workflow used throughout the study.
+Author-selected settings — including Adam with a learning rate of 0.001, the
+StepLR scheduler, cross-validation and split settings, random seeds, maximum
+epochs, early-stopping patience, batch and virtual-batch sizes, and the
+classification threshold of 0.5 — are defined directly in the source code or
+command-line defaults, and are the same settings used for the main analysis.
+TabNet constructor parameters that are not explicitly overridden use the
+defaults of the installed `pytorch-tabnet` version. Each run writes the resolved
 command-line settings and pipeline metadata to `run_config.json`; optimizer and
 scheduler values remain visible in the source code. No separate private
-hyperparameter file is required. Accordingly, the manuscript statement that
-“hyperparameter settings are publicly available in the GitHub repository” is
-supported by the released code. For exact reproduction of library-default TabNet
+hyperparameter file is required. For exact reproduction of library-default TabNet
 architecture parameters, dependency versions should be pinned in
 `requirements.txt`.
 
@@ -233,26 +245,29 @@ whether any positive culture falls inside it. These are different rules with
 different anchors; see the module docstrings before comparing against the
 manuscript.
 
-**Propensity-score matching.** 1:1 greedy nearest-neighbour matching on sex, age
-and Charlson Comorbidity Index, applied only to the internal development cohort
-and never to the test or external cohorts. For the cross-validation report,
-matching is performed inside each training fold, so the validation fold retains
-the cohort's natural outcome prevalence. The final model is trained on the fully
-matched development cohort.
+**Class balancing.** The main analysis applied 1:1 greedy nearest-neighbour
+propensity-score matching on sex, age and Charlson Comorbidity Index
+(calliper = 0.05), followed by Borderline-SMOTE, applied only to the internal
+development cohort and never to the test or external cohorts; for the
+cross-validation report, matching was performed inside each training fold so
+that the validation fold retained the cohort's natural outcome prevalence. The
+`04_*` scripts released here deliberately omit this step and train on the
+unbalanced development cohort. The balancing implementation is part of the
+withheld `02_*` track.
 
-**APACHE II aggregation.** Aggregated as the maximum within the 8-hour window in
-every modelling script, so that the no-balancing analysis differs from the main
-analysis only by the absence of class balancing.
+**Calibration.** The main analysis fitted isotonic regression on an independent
+calibration cohort split at the patient level, as described in the manuscript
+and online supplemental figures 6 and 7. The `04_*` scripts report uncalibrated
+probabilities. The calibration implementation is part of the withheld `03_*`
+track.
+
+**APACHE II aggregation.** Aggregated as the maximum within the 8-hour window,
+consistent with the main analysis, so that the released track differs from the
+main analysis only by the absence of class balancing and calibration.
 `--apache-aggregation first` is available as an explicit sensitivity option.
 
-**Calibration.** Isotonic regression is fitted on an independent calibration
-cohort split at the patient level. Metrics reported for that calibration cohort
-are in-sample and are flagged as such in the output table
-(`calibrator_fitted_on_this_set`, `evaluation`); held-out calibration
-performance is the internal-test row.
-
-**Randomness.** All splits, matching and resampling are seeded. Control index
-times in step 1 are derived from the seed and the stay identifier, so adding or
+**Randomness.** All splits and resampling are seeded. Control index times in
+step 1 are derived from the seed and the stay identifier, so adding or
 reordering other stays does not change existing index times.
 
 ---
@@ -285,12 +300,12 @@ and testing for the benefit of public knowledge is permitted.
 **Commercial use is not licensed.** Integration into proprietary or commercial
 software, commercial deployment, and redistribution for commercial profit are
 outside the scope of this license. The authors additionally reserve all patent
-rights in the underlying method; the patent license granted by these terms
+rights in the underlying method, including those claimed in Taiwan invention
+patent application no. 113134453; the patent license granted by these terms
 extends only to permitted noncommercial purposes.
 
 For commercial licensing, patent enquiries, regulatory questions, or
-institutional partnerships, please contact the corresponding author before
-proceeding.
+institutional partnerships, please contact the first author before proceeding.
 
 > Required Notice: Copyright 2026 Fang-Ju Sun and contributors
 
@@ -318,5 +333,6 @@ If you use this code, please cite:
 **Fang-Ju Sun** — first author and repository contact
 ✉️ fjsun.b612@mmh.org.tw
 
-Please use this address for requests concerning the withheld main model and
-dashboard, data access, commercial licensing, or patent matters.
+Please use this address for requests concerning the withheld main model,
+calibration workflow and dashboard, data access, commercial licensing, or patent
+matters.
